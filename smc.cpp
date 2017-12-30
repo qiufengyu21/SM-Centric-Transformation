@@ -150,11 +150,12 @@ public:
 		
 		}
 	}
-
-	    std::string getStmtText(Stmt *s) {
-		    SourceLocation a(SM->getExpansionLoc(s->getLocStart())), b(Lexer::getLocForEndOfToken(SourceLocation(SM->getExpansionLoc(s->getLocEnd())), 0,  *SM, *LO));
-		    return std::string(SM->getCharacterData(a), SM->getCharacterData(b)-SM->getCharacterData(a));
-	    }
+	
+	// This function returns the string representation of a valid Stmt pointer s
+	std::string getStmtText(Stmt *s) {
+		SourceLocation a(SM->getExpansionLoc(s->getLocStart())), b(Lexer::getLocForEndOfToken(SourceLocation(SM->getExpansionLoc(s->getLocEnd())), 0,  *SM, *LO));
+		return std::string(SM->getCharacterData(a), SM->getCharacterData(b)-SM->getCharacterData(a));
+	}
 
 private:
 	Rewriter &Rewrite;
