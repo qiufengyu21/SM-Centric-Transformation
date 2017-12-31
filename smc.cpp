@@ -150,12 +150,11 @@ public:
 		
 		}
 	}
-	
-	// This function returns the string representation of a valid Stmt pointer s
-	std::string getStmtText(Stmt *s) {
-		SourceLocation a(SM->getExpansionLoc(s->getLocStart())), b(Lexer::getLocForEndOfToken(SourceLocation(SM->getExpansionLoc(s->getLocEnd())), 0,  *SM, *LO));
-		return std::string(SM->getCharacterData(a), SM->getCharacterData(b)-SM->getCharacterData(a));
-	}
+
+	    std::string getStmtText(Stmt *s) {
+		    SourceLocation a(SM->getExpansionLoc(s->getLocStart())), b(Lexer::getLocForEndOfToken(SourceLocation(SM->getExpansionLoc(s->getLocEnd())), 0,  *SM, *LO));
+		    return std::string(SM->getCharacterData(a), SM->getCharacterData(b)-SM->getCharacterData(a));
+	    }
 
 private:
 	Rewriter &Rewrite;
@@ -179,7 +178,7 @@ bool MyRecursiveASTVisitor::VisitFunctionDecl(Decl *Declaration){
 
 
 
-			if(f->hasBody()){
+			if(f->doesThisDeclarationHaveABody()){
 				Stmt *FuncBody = f->getBody();
 				Rewrite.InsertText(FuncBody->getLocStart().getLocWithOffset(1), "\n    __SMC_Begin\n", true, true);
 				Rewrite.InsertText(FuncBody->getLocEnd(), "\n    __SMC_End\n", true, true);
@@ -190,9 +189,10 @@ bool MyRecursiveASTVisitor::VisitFunctionDecl(Decl *Declaration){
 		}
 		
 		else{ // this FunctionDecl is not a CUDA kernel function declaration
-			if(Stmt *s = f->getBody()){
-				
-				RewriteKernelCall(s);
+			if(f->doesThisDeclarationHaveABody()){
+				if(Stmt *s = f->getBody()){
+					RewriteKernelCall(s);		
+				}
 			}
 		}
 	}
