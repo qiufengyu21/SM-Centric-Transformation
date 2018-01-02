@@ -1,5 +1,8 @@
 #include <iostream>
 #include <string>
+#include <fstream>
+#include <sstream>
+
 
 #include "clang/AST/AST.h"
 #include "clang/AST/Stmt.h"
@@ -220,7 +223,7 @@ public:
 
 	explicit MyASTConsumer(Rewriter &Rewrite, ASTContext *Context, CompilerInstance *comp) : rv(Rewrite, Context), HandleGrid(Rewrite), CI(comp){
 		SourceLocation startOfFile = Rewrite.getSourceMgr().getLocForStartOfFile(Rewrite.getSourceMgr().getMainFileID());
-		Rewrite.InsertText(startOfFile, "/* Added smc.h*/ \n#include \"smc.h\"\n",true,true);
+		Rewrite.InsertText(startOfFile, "/* Added smc.h*/ \n#include \"smc.h\"\n\n",true,true);
 		//Matcher.addMatcher(varDecl(hasName(kernel_grid)).bind("gridcall"), &HandleGrid);
 	}
 
@@ -250,8 +253,21 @@ class MyFrontendAction : public ASTFrontendAction {
 public:
 	MyFrontendAction() {}
 	void EndSourceFileAction() override {
-		TheRewriter.getEditBuffer(TheRewriter.getSourceMgr().getMainFileID())
-		.write(llvm::outs());
+		const RewriteBuffer *RewriteBuf = TheRewriter.getRewriteBufferFor(TheRewriter.getSourceMgr().getMainFileID());
+		//TheRewriter.getEditBuffer(TheRewriter.getSourceMgr().getMainFileID())
+		//.write(llvm::outs());
+		std::ofstream outputFile;
+		filename = std::string(getCurrentFile());
+		filename.insert(filename.length() - 3, "_smc");
+		if (!filename.empty()){
+			outputFile.open(filename);
+		}
+		else{
+			outputFile.open("output.cu");
+		}
+
+		outputFile << std::string(RewriteBuf->begin(), RewriteBuf->end());
+		outputFile.close();
 	}
 
 	std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
@@ -262,6 +278,7 @@ public:
 
 private:
 	Rewriter TheRewriter;
+	std::string filename;
 };
 
 
