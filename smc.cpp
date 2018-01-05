@@ -124,13 +124,13 @@ public:
 	}
 
 	void RewriteKernelCall(Stmt *s){
-		if(traverseCount == 2){// second time traversing the AST tree
-			if(gridX == 1 && gridY == 1){
+		if(traverseCount != 1){// second time traversing the AST tree
+			if(gridX == 1 && gridY == 1 && traverseCount == 2){
 				SourceLocation sl = s->getLocStart();
 				std::stringstream gridVariable;
 				gridVariable << "dim3 "
 					     << "__SMC_orgGridDim"
-					     << " ("
+					     << "("
 					     << gridValueX
 					     << ", "
 					     << gridValueY
@@ -142,6 +142,9 @@ public:
 
 			}
 			else if(BinaryOperator *bo = dyn_cast<BinaryOperator>(s)){
+				if(traverseCount == 2){
+				
+				
 				std::string LHS = getStmtText(bo->getLHS());
 				std::string RHS = getStmtText(bo->getRHS());
 				std::stringstream gridNameX;
@@ -156,6 +159,43 @@ public:
 				else if (LHS == gridNameY.str()){
 					gridY++;
 					gridValueY = RHS;
+				}
+				}
+			}
+			else if(DeclStmt *ds = dyn_cast<DeclStmt>(s)){
+				if(traverseCount == 3){
+				if(ds->isSingleDecl()){
+					Decl *d = ds->getSingleDecl();
+					if(VarDecl *vd = dyn_cast<VarDecl>(d)){
+						if(vd->hasInit()){
+							std::string gridname = vd->getNameAsString();
+							std::string gridvalue = getStmtText(vd->getInit());
+							if(gridname == kernel_grid){
+								// found 1D grid init
+								std::cout<<"SINGLE GRID DEMESION!\n";
+								std::stringstream temp;
+								temp << "\n\t"
+								     << "dim3 "
+								     << "__SMC_orgGridDim"
+								     << "("
+								     << gridvalue
+								     << ");\n";
+								Rewrite.InsertText(vd->getInit()->getLocEnd().getLocWithOffset(7), temp.str(), true, true);
+								traverseCount++;
+								isDirectGridSizeInit = false;
+								return;
+							}
+						}
+					}
+				}
+				
+				/*
+				Expr *e = vd->getInit();
+				if(BinaryOperator *bb = dyn_cast<BinaryOperator>(e)){
+					std::string LHS = getStmtText(bb->getLHS());
+					std::cout<<LHS<<"\n";
+				}
+				*/
 				}
 			}
 		}
@@ -218,7 +258,7 @@ private:
 
 
 bool MyRecursiveASTVisitor::VisitFunctionDecl(Decl *Declaration){
-	if(traverseCount == 2){ // second time traversing the AST tree
+	if(traverseCount != 1){ // second time traversing the AST tree
 		if(FunctionDecl *f = dyn_cast<FunctionDecl>(Declaration)){
 			kernelCount = 0;
 			num_parents = 0;
@@ -318,6 +358,8 @@ public:
 	}
 
 	virtual void HandleTranslationUnit(ASTContext &Context) {
+		rv.TraverseDecl(Context.getTranslationUnitDecl());
+		traverseCount++;
 		rv.TraverseDecl(Context.getTranslationUnitDecl());
 		traverseCount++;
 		rv.TraverseDecl(Context.getTranslationUnitDecl());
