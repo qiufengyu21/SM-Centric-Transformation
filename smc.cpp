@@ -25,6 +25,7 @@ using namespace clang::ast_matchers;
 
 // global variable for counting how many times a CUDA kernel function has been called.
 int kernelCount = 0;
+SourceLocation sl;
 int num_parents = 0;
 int loop = 0;
 std::string kernel_grid = "";
@@ -120,10 +121,9 @@ public:
 			kernelCount++;
 			//std::cout<<"KernelCount = "<<kernelCount<<"\n";
 			CallExpr *kernelConfig = kce->getConfig();
-			Expr *grid = kernelConfig->getArg(0)->IgnoreImpCasts();
+			Expr *grid = kernelConfig->getArg(0);
 			kernel_grid = getStmtText(grid);
-			//std::string callee = getStmtText(kce->getCallee());
-			//std::cout<<callee<<"\n";
+			//std::cout<<kernel_grid<<"\n";
 			Rewrite.ReplaceText(grid->getLocStart(), kernel_grid.length(), "grid");
 			//std::cout<<"Finished rewrite grid in <<<>>>\n";
 			if(kernelCount == 1){
@@ -208,8 +208,16 @@ public:
 	GridHandler(Rewriter &Rewrite) : Rewrite(Rewrite){}
 	virtual void run(const MatchFinder::MatchResult &Result){
 		if(const VarDecl *vd = Result.Nodes.getNodeAs<VarDecl>("gridcall")){
-			SourceLocation sl = vd->getSourceRange().getBegin().getLocWithOffset(5);
-			Rewrite.ReplaceText(sl, kernel_grid.length(), "__SMC_orgGridDim");
+			SourceLocation source = vd->getInit()->getLocStart();
+			if(sl != source){
+				sl  = vd->getInit()->getLocStart();
+				Rewrite.ReplaceText(sl, kernel_grid.length(), "__SMC_orgGridDim");
+			}
+			
+			//SourceLocation sl = vd->getInit()->getLocStart();
+			//std::cout<<"About to add __SMC_orgGridDim!\n";
+			//std::cout<<kernel_grid<<"\n";
+			//Rewrite.ReplaceText(sl, kernel_grid.length(), "__SMC_orgGridDim");
 		}
 	}
 
