@@ -125,7 +125,23 @@ public:
 
 	void RewriteKernelCall(Stmt *s){
 		if(traverseCount == 2){// second time traversing the AST tree
-			if(BinaryOperator *bo = dyn_cast<BinaryOperator>(s)){
+			if(gridX == 1 && gridY == 1){
+				SourceLocation sl = s->getLocStart();
+				std::stringstream gridVariable;
+				gridVariable << "dim3 "
+					     << "__SMC_orgGridDim"
+					     << " ("
+					     << gridValueX
+					     << ", "
+					     << gridValueY
+					     << ");\n";
+				Rewrite.InsertText(sl, gridVariable.str(), true, true);
+				traverseCount++;
+				isDirectGridSizeInit = false;
+				return;
+
+			}
+			else if(BinaryOperator *bo = dyn_cast<BinaryOperator>(s)){
 				std::string LHS = getStmtText(bo->getLHS());
 				std::string RHS = getStmtText(bo->getRHS());
 				std::stringstream gridNameX;
@@ -140,22 +156,6 @@ public:
 				else if (LHS == gridNameY.str()){
 					gridY++;
 					gridValueY = RHS;
-				}
-
-				if(gridX == 1 && gridY == 1 && (LHS != gridNameX.str() && LHS != gridNameY.str())){
-					SourceLocation sl = bo->getLocStart();
-					std::stringstream gridVariable;
-					gridVariable << "dim3 "
-						     << "__SMC_orgGridDim"
-						     << " ("
-						     << gridValueX
-						     << ", "
-						     << gridValueY
-						     << ");\n";
-					Rewrite.InsertText(sl, gridVariable.str(), true, true);
-					traverseCount++;
-					isDirectGridSizeInit = false;
-					return;
 				}
 			}
 		}
@@ -190,7 +190,14 @@ public:
 			}
 			//std::cout<<"Finished adding __SMC_init();\n=====================\n";
 			//Rewrite.InsertText(kce->getLocStart(), "__SMC_init();\n", true, true);
-			Rewrite.InsertText(kce->getRParenLoc(), ", __SMC_orgGridDim, __SMC_workersNeeded, __SMC_workerCount,__SMC_newChunkSeq, __SMC_seqEnds", true, true);
+			int num_args = kce->getNumArgs();
+			if(num_args == 0){
+				Rewrite.InsertText(kce->getRParenLoc(), "__SMC_orgGridDim, __SMC_workersNeeded, __SMC_workerCount, __SMC_newChunkSeq, __SMC_seqEnds", true, true);
+			}
+			else{
+				Rewrite.InsertText(kce->getRParenLoc(), ", __SMC_orgGridDim, __SMC_workersNeeded, __SMC_workerCount, __SMC_newChunkSeq, __SMC_seqEnds", true, true);
+			}
+			//Rewrite.InsertText(kce->getRParenLoc(), ", __SMC_orgGridDim, __SMC_workersNeeded, __SMC_workerCount,__SMC_newChunkSeq, __SMC_seqEnds", true, true);
 		}
 
 		for(Stmt::child_iterator CI = s->child_begin(), CE = s->child_end(); CI != CE; ++CI){
@@ -239,7 +246,13 @@ bool MyRecursiveASTVisitor::VisitFunctionDecl(Decl *Declaration){
 			TypeSourceInfo *tsi = f->getTypeSourceInfo();
 			TypeLoc tl = tsi->getTypeLoc();
 			FunctionTypeLoc FTL = tl.getAsAdjusted<FunctionTypeLoc>();
-			Rewrite.InsertText(FTL.getRParenLoc(), ", dim3 __SMC_orgGridDim, int __SMC_workersNeeded, int *__SMC_workerCount, int * __SMC_newChunkSeq, int * __SMC_seqEnds", true, true);
+			if(f->getNumParams() == 0){
+				Rewrite.InsertText(FTL.getRParenLoc(), "dim3 __SMC_orgGridDim, int __SMC_workersNeeded, int *__SMC_workerCount, int * __SMC_newChunkSeq, int * __SMC_seqEnds", true, true);
+			}
+			else{
+				Rewrite.InsertText(FTL.getRParenLoc(), ", dim3 __SMC_orgGridDim, int __SMC_workersNeeded, int *__SMC_workerCount, int * __SMC_newChunkSeq, int * __SMC_seqEnds", true, true);
+			}
+			//Rewrite.InsertText(FTL.getRParenLoc(), ", dim3 __SMC_orgGridDim, int __SMC_workersNeeded, int *__SMC_workerCount, int * __SMC_newChunkSeq, int * __SMC_seqEnds", true, true);
 
 
 
