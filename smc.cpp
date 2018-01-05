@@ -25,6 +25,13 @@ using namespace clang::ast_matchers;
 
 // global variable for counting how many times a CUDA kernel function has been called.
 int kernelCount = 0;
+int traverseCount = 1;
+int gridX = 0;
+int gridY = 0;
+std::string gridValueX;
+std::string gridValueY;
+bool isDirectGridSizeInit = true;
+
 SourceLocation sl;
 int num_parents = 0;
 int loop = 0;
@@ -117,7 +124,45 @@ public:
 	}
 
 	void RewriteKernelCall(Stmt *s){
-		if(CUDAKernelCallExpr *kce = dyn_cast<CUDAKernelCallExpr>(s)){
+		if(traverseCount == 2){// second time traversing the AST tree
+			if(BinaryOperator *bo = dyn_cast<BinaryOperator>(s)){
+				std::string LHS = getStmtText(bo->getLHS());
+				std::string RHS = getStmtText(bo->getRHS());
+				std::stringstream gridNameX;
+				gridNameX<< kernel_grid << ".x";
+				std::stringstream gridNameY;
+				gridNameY<< kernel_grid << ".y";
+
+				if(LHS == gridNameX.str()){
+					gridX++;
+					gridValueX = RHS;
+				}
+				else if (LHS == gridNameY.str()){
+					gridY++;
+					gridValueY = RHS;
+				}
+
+				if(gridX == 1 && gridY == 1 && (LHS != gridNameX.str() && LHS != gridNameY.str())){
+					SourceLocation sl = bo->getLocStart();
+					std::stringstream gridVariable;
+					gridVariable << "dim3 "
+						     << "__SMC_orgGridDim"
+						     << " ("
+						     << gridValueX
+						     << ", "
+						     << gridValueY
+						     << ");\n";
+					Rewrite.InsertText(sl, gridVariable.str(), true, true);
+					traverseCount++;
+					isDirectGridSizeInit = false;
+					return;
+				}
+			}
+		}
+		else if(CUDAKernelCallExpr *kce = dyn_cast<CUDAKernelCallExpr>(s)){
+			if(traverseCount != 1){
+				return;
+			}
 			kernelCount++;
 			//std::cout<<"KernelCount = "<<kernelCount<<"\n";
 			CallExpr *kernelConfig = kce->getConfig();
@@ -166,7 +211,25 @@ private:
 
 
 bool MyRecursiveASTVisitor::VisitFunctionDecl(Decl *Declaration){
-	if(FunctionDecl *f = dyn_cast<FunctionDecl>(Declaration)){
+	if(traverseCount == 2){ // second time traversing the AST tree
+		if(FunctionDecl *f = dyn_cast<FunctionDecl>(Declaration)){
+			kernelCount = 0;
+			num_parents = 0;
+			loop = 0;
+			if(f->hasAttr<CUDAGlobalAttr>()){
+				;
+			}
+			else{ // this FunctionDecl is not a CUDA kernel function declaration
+				if(f->doesThisDeclarationHaveABody()){
+					if(Stmt *s = f->getBody()){
+						RewriteKernelCall(s);
+					}
+				}
+			}
+		}
+		
+	}
+	else if(FunctionDecl *f = dyn_cast<FunctionDecl>(Declaration)){
 		kernelCount = 0;
 		num_parents = 0;
 		loop = 0;
@@ -243,8 +306,14 @@ public:
 
 	virtual void HandleTranslationUnit(ASTContext &Context) {
 		rv.TraverseDecl(Context.getTranslationUnitDecl());
-		Matcher.addMatcher(varDecl(hasName(kernel_grid)).bind("gridcall"), &HandleGrid);
-		Matcher.matchAST(Context);
+		traverseCount++;
+		rv.TraverseDecl(Context.getTranslationUnitDecl());
+		if(isDirectGridSizeInit){
+			Matcher.addMatcher(varDecl(hasName(kernel_grid)).bind("gridcall"), &HandleGrid);
+			Matcher.matchAST(Context);
+		}
+		//Matcher.addMatcher(varDecl(hasName(kernel_grid)).bind("gridcall"), &HandleGrid);
+		//Matcher.matchAST(Context);
 	}
 
 private:
