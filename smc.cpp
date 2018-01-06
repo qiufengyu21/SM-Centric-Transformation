@@ -164,7 +164,7 @@ public:
 				if(traverseCount == 2){
 					
 					
-					td::string LHS = getStmtText(bo->getLHS());
+					std::string LHS = getStmtText(bo->getLHS());
 					std::string RHS = getStmtText(bo->getRHS());
 					std::stringstream gridNameX;
 					gridNameX<< kernel_grid << ".x";
@@ -193,7 +193,7 @@ public:
 								std::string gridvalue = getStmtText(vd->getInit());
 								if(gridname == kernel_grid){
 								// found 1D grid init
-								std::cout<<"SINGLE GRID DEMESION!\n";
+								//std::cout<<"SINGLE GRID DEMESION!\n";
 								std::stringstream temp;
 								temp << "\n\t"
 								     << "dim3 "
