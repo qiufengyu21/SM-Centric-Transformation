@@ -32,7 +32,9 @@ int gridInt = 0;
 std::string gridValueX;
 std::string gridValueY;
 std::string gridIntValue;
-std::list<std::string> gridList = {};
+std::list<std::string> parameterList = {};
+std::list<std::string> functionnameList = {};
+str::string functionName;
 
 bool isDirectGridSizeInit = true; // if false, it means we don't need to run the matcher
 
@@ -112,7 +114,9 @@ public:
 			}
 			const clang::FunctionDecl *fd = it->get<clang::FunctionDecl>();
 			if(fd){
-				std::cout<<fd->getNameInfo().getName().getAsString()<<"\n";
+				std::string functionname = fd->getNameInfo().getName().getAsString();
+				functionnameList.push_back(functionname);
+				//std::cout<<functionname<<"\n";
 			}
 			return 1;
 		}
@@ -157,9 +161,10 @@ public:
 			If it's our 3rd time traversing, check if the grid variable is an single int.
 		*/
 		if(traverseCount != 1){// second time traversing the AST tree
-			if(!gridList.empty() && traverseCount == 2){
-				std::list<std::string>::iterator finder = std::find(gridList.begin(), gridList.end(), kernel_grid);
-				if (finder != gridList.end()){
+			if(!parameterList.empty() && traverseCount == 2){
+				std::list<std::string>::iterator finder = std::find(parameterList.begin(), parameterList.end(), kernel_grid);
+				std::list<std::string>::iterator finder1 = std::find(functionnameList.begin(), functionnameList.end(), functionName);
+				if (finder != parameterList.end() && finder1 != functionnameList.end()){
 					std::stringstream orgGridDim;
 					orgGridDim << "\n\t"
 						   << "dim3 "
@@ -169,7 +174,7 @@ public:
 						   << ");\n";
 					Rewrite.InsertText(s->getLocStart().getLocWithOffset(1), orgGridDim.str(), true, true);
 					isDirectGridSizeInit = false;
-					gridList.clear();
+					parameterList.clear();
 					return;
 				}
 			}
@@ -347,12 +352,14 @@ bool MyRecursiveASTVisitor::VisitFunctionDecl(Decl *Declaration){
 			else{ // this FunctionDecl is not a CUDA kernel function declaration
 				for(unsigned int i = 0; i < f->getNumParams(); i++){
 					std::string parameters = f->parameters()[i]->getQualifiedNameAsString();
-					gridList.push_back(parameters);
+					parameterList.push_back(parameters);
 				}
 				if(f->doesThisDeclarationHaveABody()){
 					if(Stmt *s = f->getBody()){
+						functionName = f->getNameInfo().getName().getAsString();
 						RewriteKernelCall(s);
-						gridList.clear();
+						functionName = "";
+						parameterList.clear();
 					}
 				}
 			}
@@ -444,6 +451,7 @@ public:
 		rv.TraverseDecl(Context.getTranslationUnitDecl());
 		traverseCount++;
 		rv.TraverseDecl(Context.getTranslationUnitDecl());
+		functionnameList.clear();
 		traverseCount++;
 		rv.TraverseDecl(Context.getTranslationUnitDecl());
 		if(isDirectGridSizeInit){
