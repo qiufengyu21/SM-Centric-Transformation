@@ -142,6 +142,12 @@ public:
 		If yes, rewrite the grid variable to dim3 __SMC_orgGridDim(...);
 	*/
 	void RewriteKernelCall(Stmt *s){
+		/*
+			We first check the traverseCount.
+			If it's our first time traversing, rewrite the CUDA kernel call first, and store the grid variable name.
+			If it's our second time traversing, check if the grid name variable is indirectly initialized.
+			If it's our 3rd time traversing, check if the grid variable is an single int.
+		*/
 		if(traverseCount != 1){// second time traversing the AST tree
 			if(gridX == 1 && gridY == 1 && traverseCount == 2){
 				SourceLocation sl = s->getLocStart();
@@ -160,6 +166,12 @@ public:
 
 			}
 			
+			/*
+				Second time, check if the grid variable is defined in this form:
+				dim3 grid;
+				grid.x = ...;
+				grid.y = ...;
+			*/
 			else if(BinaryOperator *bo = dyn_cast<BinaryOperator>(s)){
 				if(traverseCount == 2){
 					
@@ -183,6 +195,9 @@ public:
 				}
 			}
 			
+			/*
+				3rd time traversing, check if there is a integer grid variable. e.g. int numBlocks = 128;
+			*/
 			else if(DeclStmt *ds = dyn_cast<DeclStmt>(s)){
 				if(traverseCount == 3){
 					if(ds->isSingleDecl()){
