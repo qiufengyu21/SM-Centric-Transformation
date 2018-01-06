@@ -147,6 +147,8 @@ public:
 				
 				std::string LHS = getStmtText(bo->getLHS());
 				std::string RHS = getStmtText(bo->getRHS());
+				//std::cout<<LHS<< "\n";
+				//std::cout<<RHS<<"\n";
 				std::stringstream gridNameX;
 				gridNameX<< kernel_grid << ".x";
 				std::stringstream gridNameY;
@@ -161,6 +163,8 @@ public:
 					gridValueY = RHS;
 				}
 				}
+
+
 			}
 			else if(DeclStmt *ds = dyn_cast<DeclStmt>(s)){
 				if(traverseCount == 3){
@@ -172,7 +176,6 @@ public:
 							std::string gridvalue = getStmtText(vd->getInit());
 							if(gridname == kernel_grid){
 								// found 1D grid init
-								//std::cout<<"SINGLE GRID DEMESION!\n";
 								std::stringstream temp;
 								temp << "\n\t"
 								     << "dim3 "
