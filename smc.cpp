@@ -24,13 +24,13 @@ using namespace clang;
 using namespace clang::ast_matchers;
 
 // global variable for counting how many times a CUDA kernel function has been called.
-int kernelCount = 0;
-int traverseCount = 1;
+int kernelCount = 0; // used to find the first kernel call
+int traverseCount = 1; // for this tool we need to traverse the AST tree 3 times
 int gridX = 0;
 int gridY = 0;
 std::string gridValueX;
 std::string gridValueY;
-bool isDirectGridSizeInit = true;
+bool isDirectGridSizeInit = true; // if false, it means we don't need to run the matcher
 
 SourceLocation sl;
 int num_parents = 0;
@@ -56,7 +56,15 @@ static cl::extrahelp MoreHelp("\nMore help text...");
 class MyRecursiveASTVisitor : public RecursiveASTVisitor <MyRecursiveASTVisitor> {
 public:
 	explicit MyRecursiveASTVisitor(Rewriter &R, ASTContext *Context):Rewrite(R), Context(Context){}
+	/*
+		This function is used to traverse the entire AST tree and finds any function declarations.
+		If any FunctionDecl is found, check if it's a CUDA kernel FunctionDecl, then perform different action accordingly.
+	*/
 	bool VisitFunctionDecl(Decl *Declaration);
+	
+	/*
+		This function is to rewrite the blockIdx.x and blockIdx.y to smc form
+	*/
 	void RewriteBlockIdx(Stmt *s){
 		if(MemberExpr *me = dyn_cast<MemberExpr>(s)){
 			//std::string member = me->getMemberDecl()->getNameAsString();
@@ -104,6 +112,7 @@ public:
 		return 0;
 	}
 
+	//This function inserts __SMC_init(); at the right place.
 	void GetStmt(int num_parents, const clang::Stmt& stmt){
 		if(loop == num_parents-2){
 			auto it = Context->getParents(stmt).begin();
@@ -123,6 +132,15 @@ public:
 		
 	}
 
+	/*
+		The is the core function of this tool.
+		For every CUDA kernel function call, it first record the name of the grid variable during the first traverse.
+		Then it tries to find out if the grid variable is initialized separately in the form of grid.x = ... and grid.y = ...
+		If this is the case, add a new line after the initialization: dim3 __SMC_orgGridDim();
+		
+		If no, it traverse the AST for the 3rd time and tries to find out if the grid variable is initialized as a integer, in other words, 1-D grid.
+		If yes, rewrite the grid variable to dim3 __SMC_orgGridDim(...);
+	*/
 	void RewriteKernelCall(Stmt *s){
 		if(traverseCount != 1){// second time traversing the AST tree
 			if(gridX == 1 && gridY == 1 && traverseCount == 2){
@@ -141,41 +159,41 @@ public:
 				return;
 
 			}
+			
 			else if(BinaryOperator *bo = dyn_cast<BinaryOperator>(s)){
 				if(traverseCount == 2){
-				
-				
-				std::string LHS = getStmtText(bo->getLHS());
-				std::string RHS = getStmtText(bo->getRHS());
-				//std::cout<<LHS<< "\n";
-				//std::cout<<RHS<<"\n";
-				std::stringstream gridNameX;
-				gridNameX<< kernel_grid << ".x";
-				std::stringstream gridNameY;
-				gridNameY<< kernel_grid << ".y";
-
-				if(LHS == gridNameX.str()){
-					gridX++;
-					gridValueX = RHS;
+					
+					
+					td::string LHS = getStmtText(bo->getLHS());
+					std::string RHS = getStmtText(bo->getRHS());
+					std::stringstream gridNameX;
+					gridNameX<< kernel_grid << ".x";
+					std::stringstream gridNameY;
+					gridNameY<< kernel_grid << ".y";
+					
+					if(LHS == gridNameX.str()){
+						gridX++;
+						gridValueX = RHS;
+					}
+					
+					else if (LHS == gridNameY.str()){
+						gridY++;
+						gridValueY = RHS;
+					}
 				}
-				else if (LHS == gridNameY.str()){
-					gridY++;
-					gridValueY = RHS;
-				}
-				}
-
-
 			}
+			
 			else if(DeclStmt *ds = dyn_cast<DeclStmt>(s)){
 				if(traverseCount == 3){
-				if(ds->isSingleDecl()){
-					Decl *d = ds->getSingleDecl();
-					if(VarDecl *vd = dyn_cast<VarDecl>(d)){
-						if(vd->hasInit()){
-							std::string gridname = vd->getNameAsString();
-							std::string gridvalue = getStmtText(vd->getInit());
-							if(gridname == kernel_grid){
+					if(ds->isSingleDecl()){
+						Decl *d = ds->getSingleDecl();
+						if(VarDecl *vd = dyn_cast<VarDecl>(d)){
+							if(vd->hasInit()){
+								std::string gridname = vd->getNameAsString();
+								std::string gridvalue = getStmtText(vd->getInit());
+								if(gridname == kernel_grid){
 								// found 1D grid init
+								std::cout<<"SINGLE GRID DEMESION!\n";
 								std::stringstream temp;
 								temp << "\n\t"
 								     << "dim3 "
@@ -248,11 +266,14 @@ public:
 		
 		}
 	}
-
+	
+	/*
+		This function returns the string representation of any give stmt pointer
+	*/
 	std::string getStmtText(Stmt *s) {
 		SourceLocation a(SM->getExpansionLoc(s->getLocStart())), b(Lexer::getLocForEndOfToken(SourceLocation(SM->getExpansionLoc(s->getLocEnd())), 0,  *SM, *LO));
 		return std::string(SM->getCharacterData(a), SM->getCharacterData(b)-SM->getCharacterData(a));
-	    }
+	}
 
 private:
 	Rewriter &Rewrite;
