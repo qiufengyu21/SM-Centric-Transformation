@@ -172,7 +172,7 @@ public:
 							std::string gridvalue = getStmtText(vd->getInit());
 							if(gridname == kernel_grid){
 								// found 1D grid init
-								std::cout<<"SINGLE GRID DEMESION!\n";
+								//std::cout<<"SINGLE GRID DEMESION!\n";
 								std::stringstream temp;
 								temp << "\n\t"
 								     << "dim3 "
