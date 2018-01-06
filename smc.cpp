@@ -426,10 +426,27 @@ class GridHandler : public MatchFinder::MatchCallback{
 public:
 	GridHandler(Rewriter &Rewrite) : Rewrite(Rewrite){}
 	virtual void run(const MatchFinder::MatchResult &Result){
+		//std::cout<<"Executing GridHandler\n";
 		if(const VarDecl *vd = Result.Nodes.getNodeAs<VarDecl>("gridcall")){
-			SourceLocation source = vd->getInit()->getLocStart();
+			//std::cout<<"1\n";
+			SourceLocation source;
+			if(vd->hasInit()){
+				source = vd->getInit()->getLocStart();
+			}
+			else{
+				source = vd->getLocStart();
+			}
+			//std::cout<<"2\n";
 			if(sl != source){
-				sl  = vd->getInit()->getLocStart();
+				//std::cout<<"3\n";
+				if(vd->hasInit()){
+					sl = vd->getInit()->getLocStart();
+				}
+				else{
+					sl = vd->getLocStart();
+				}
+				//sl  = vd->getInit()->getLocStart();
+				//std::cout<<"3.5\n";
 				std::cout<<"Mathcer grid rewrite\n";
 				Rewrite.ReplaceText(sl, kernel_grid.length(), "__SMC_orgGridDim");
 			}
@@ -462,13 +479,18 @@ public:
 	}
 
 	virtual void HandleTranslationUnit(ASTContext &Context) {
+		//std::cout<<traverseCount<<"\n";
 		rv.TraverseDecl(Context.getTranslationUnitDecl());
 		traverseCount++;
+		//std::cout<<traverseCount<<"\n";
 		rv.TraverseDecl(Context.getTranslationUnitDecl());
 		functionnameList.clear();
 		traverseCount++;
+		//std::cout<<traverseCount<<"\n";
 		rv.TraverseDecl(Context.getTranslationUnitDecl());
+		//std::cout<<traverseCount<<"\n";
 		if(isDirectGridSizeInit){
+			//std::cout<<kernel_grid<<"\n";
 			Matcher.addMatcher(varDecl(hasName(kernel_grid)).bind("gridcall"), &HandleGrid);
 			Matcher.matchAST(Context);
 		}
