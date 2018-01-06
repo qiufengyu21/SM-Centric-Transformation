@@ -28,8 +28,12 @@ int kernelCount = 0; // used to find the first kernel call
 int traverseCount = 1; // for this tool we need to traverse the AST tree 3 times
 int gridX = 0;
 int gridY = 0;
+int gridInt = 0;
 std::string gridValueX;
 std::string gridValueY;
+std::string gridIntValue;
+std::list<std::string> gridList = {};
+
 bool isDirectGridSizeInit = true; // if false, it means we don't need to run the matcher
 
 SourceLocation sl;
@@ -106,6 +110,10 @@ public:
 				num_parents++;
 				return GetParentStmt(*s);
 			}
+			const clang::FunctionDecl *fd = it->get<clang::FunctionDecl>();
+			if(fd){
+				std::cout<<fd->getNameInfo().getName().getAsString()<<"\n";
+			}
 			return 1;
 		}
 		
@@ -149,6 +157,22 @@ public:
 			If it's our 3rd time traversing, check if the grid variable is an single int.
 		*/
 		if(traverseCount != 1){// second time traversing the AST tree
+			if(!gridList.empty() && traverseCount == 2){
+				std::list<std::string>::iterator finder = std::find(gridList.begin(), gridList.end(), kernel_grid);
+				if (finder != gridList.end()){
+					std::stringstream orgGridDim;
+					orgGridDim << "\n\t"
+						   << "dim3 "
+						   << "__SMC_orgGridDim"
+						   << "("
+						   << kernel_grid
+						   << ");\n";
+					Rewrite.InsertText(s->getLocStart().getLocWithOffset(1), orgGridDim.str(), true, true);
+					isDirectGridSizeInit = false;
+					gridList.clear();
+					return;
+				}
+			}
 			if(gridX == 1 && gridY == 1 && traverseCount == 2){
 				SourceLocation sl = s->getLocStart();
 				std::stringstream gridVariable;
@@ -165,6 +189,18 @@ public:
 				return;
 
 			}
+			/*
+			else if(gridInt == 1 && traverseCount == 3){
+				if(DeclStmt *dst = dyn_cast<DeclStmt>(s)){
+					std::cout<<"IM HERE\n";
+					SourceLocation sl = dst->getLocStart();
+					Rewrite.InsertText(sl, gridIntValue, true, true);
+					isDirectGridSizeInit = false;
+					gridInt = 0;
+					return;
+				}
+			}
+			*/
 			
 			/*
 				Second time, check if the grid variable is defined in this form:
@@ -210,16 +246,17 @@ public:
 								// found 1D grid init
 								//std::cout<<"SINGLE GRID DEMESION!\n";
 								std::stringstream temp;
-								temp << "\n\t"
-								     << "dim3 "
+								temp << "dim3 "
 								     << "__SMC_orgGridDim"
 								     << "("
 								     << gridvalue
 								     << ");\n";
-								Rewrite.InsertText(vd->getInit()->getLocEnd().getLocWithOffset(7), temp.str(), true, true);
-								traverseCount++;
+								gridIntValue = temp.str();
+								gridInt = 1;
+								//std::cout<<gridIntValue<<"\n";
+								Rewrite.InsertText(ds->getLocStart(), temp.str(), true, true);
+								//traverseCount++;
 								isDirectGridSizeInit = false;
-								return;
 							}
 						}
 					}
@@ -239,6 +276,7 @@ public:
 			if(traverseCount != 1){
 				return;
 			}
+			//std::cout<<"inside cudakernelcallexpr\n";
 			kernelCount++;
 			//std::cout<<"KernelCount = "<<kernelCount<<"\n";
 			CallExpr *kernelConfig = kce->getConfig();
@@ -246,7 +284,7 @@ public:
 			kernel_grid = getStmtText(grid);
 			//std::cout<<kernel_grid<<"\n";
 			Rewrite.ReplaceText(grid->getLocStart(), kernel_grid.length(), "grid");
-			//std::cout<<"Finished rewrite grid in <<<>>>\n";
+			//std::cout<<"Finished rewrite grid in <<>>>\n";
 			if(kernelCount == 1){
 				//std::cout<<"Inside kerNelCount == 1 \n";
 				//Rewrite.InsertText(kce->getLocStart(), "__SMC_init();\n", true, true);
@@ -274,6 +312,7 @@ public:
 				Rewrite.InsertText(kce->getRParenLoc(), ", __SMC_orgGridDim, __SMC_workersNeeded, __SMC_workerCount, __SMC_newChunkSeq, __SMC_seqEnds", true, true);
 			}
 			//Rewrite.InsertText(kce->getRParenLoc(), ", __SMC_orgGridDim, __SMC_workersNeeded, __SMC_workerCount,__SMC_newChunkSeq, __SMC_seqEnds", true, true);
+			//std::cout<<"finished adding 5 extra parameters for kernel call\n";
 		}
 
 		for(Stmt::child_iterator CI = s->child_begin(), CE = s->child_end(); CI != CE; ++CI){
@@ -306,9 +345,14 @@ bool MyRecursiveASTVisitor::VisitFunctionDecl(Decl *Declaration){
 				;
 			}
 			else{ // this FunctionDecl is not a CUDA kernel function declaration
+				for(unsigned int i = 0; i < f->getNumParams(); i++){
+					std::string parameters = f->parameters()[i]->getQualifiedNameAsString();
+					gridList.push_back(parameters);
+				}
 				if(f->doesThisDeclarationHaveABody()){
 					if(Stmt *s = f->getBody()){
 						RewriteKernelCall(s);
+						gridList.clear();
 					}
 				}
 			}
