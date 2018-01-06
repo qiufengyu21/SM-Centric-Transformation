@@ -34,7 +34,7 @@ std::string gridValueY;
 std::string gridIntValue;
 std::list<std::string> parameterList = {};
 std::list<std::string> functionnameList = {};
-str::string functionName;
+std::string functionName;
 
 bool isDirectGridSizeInit = true; // if false, it means we don't need to run the matcher
 
@@ -172,6 +172,7 @@ public:
 						   << "("
 						   << kernel_grid
 						   << ");\n";
+					std::cout<<"Function Parameter grid rewrite\n";
 					Rewrite.InsertText(s->getLocStart().getLocWithOffset(1), orgGridDim.str(), true, true);
 					isDirectGridSizeInit = false;
 					parameterList.clear();
@@ -188,6 +189,7 @@ public:
 					     << ", "
 					     << gridValueY
 					     << ");\n";
+				std::cout<<"Indirect grid rewrite\n";
 				Rewrite.InsertText(sl, gridVariable.str(), true, true);
 				traverseCount++;
 				isDirectGridSizeInit = false;
@@ -244,10 +246,17 @@ public:
 					if(ds->isSingleDecl()){
 						Decl *d = ds->getSingleDecl();
 						if(VarDecl *vd = dyn_cast<VarDecl>(d)){
+							//if(ValueDecl *value = dyn_cast<ValueDecl>(vd)){
+							//	std::string dataType = value->getType().getAsString();
 							if(vd->hasInit()){
+								std::string dataType = "";
+								if(ValueDecl *value = dyn_cast<ValueDecl>(vd)){
+									dataType = value->getType().getAsString();
+								}
 								std::string gridname = vd->getNameAsString();
 								std::string gridvalue = getStmtText(vd->getInit());
-								if(gridname == kernel_grid){
+								
+								if(gridname == kernel_grid && dataType != "dim3"){
 								// found 1D grid init
 								//std::cout<<"SINGLE GRID DEMESION!\n";
 								std::stringstream temp;
@@ -259,6 +268,10 @@ public:
 								gridIntValue = temp.str();
 								gridInt = 1;
 								//std::cout<<gridIntValue<<"\n";
+								std::cout<<"Single int grid rewrite\n";
+								std::cout<<"gridname: "<<gridname<<"\n";
+								std::cout<<"gridvalue: "<<gridvalue<<"\n";
+								std::cout<<"kernel_grid name: "<<kernel_grid<<"\n";
 								Rewrite.InsertText(ds->getLocStart(), temp.str(), true, true);
 								//traverseCount++;
 								isDirectGridSizeInit = false;
@@ -417,6 +430,7 @@ public:
 			SourceLocation source = vd->getInit()->getLocStart();
 			if(sl != source){
 				sl  = vd->getInit()->getLocStart();
+				std::cout<<"Mathcer grid rewrite\n";
 				Rewrite.ReplaceText(sl, kernel_grid.length(), "__SMC_orgGridDim");
 			}
 			
